@@ -1,0 +1,17 @@
+services:
+  immich-wake-helper:
+    build: .
+    container_name: immich-wake-helper
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TARGET_IP=192.168.0.116
+      - TARGET_PORT=2283
+      - TARGET_MAC=3C:52:82:72:31:9B
+      - WAKE_TIMEOUT=180
+      - WAKE_COOLDOWN=20
+      - PROBE_TIMEOUT=2
+      - PORT=18080
+      - SETTINGS_PATH=/data/settings.json
+    volumes:
+      - ./data:/data

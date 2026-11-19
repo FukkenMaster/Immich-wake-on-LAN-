@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Immich is offline</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: #f6f8fa; color: #1f2328; margin: 0; display: flex; min-height: 100vh; align-items: center; justify-content: center; }
+    .card { background: #fff; padding: 2rem 2.5rem; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); text-align: center; max-width: 440px; width: 90%; }
+    img.logo { width: 220px; max-width: 80%; height: auto; margin-bottom: 1rem; }
+    h1 { font-size: 1.25rem; margin: .25rem 0 1rem; font-weight: 600; }
+    #status { margin: 1rem 0; font-size: 1rem; min-height: 1.5em; }
+    .waking { color: #0969da; }
+    .error { color: #cf222e; }
+    .ok { color: #1a7f37; }
+    button { background: #4250af; color: #fff; border: 0; padding: .6rem 1.1rem; border-radius: 8px; font-size: .95rem; cursor: pointer; }
+    button:hover { background: #3240a0; }
+    .row { margin-top: 1.25rem; font-size: .9rem; color: #57606a; }
+    label { cursor: pointer; user-select: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="https://ui.immich.app/_app/immutable/assets/immich-logo-stacked-dark.BcN8KrTB.svg" alt="Immich">
+    <h1>Immich is currently offline</h1>
+    <div id="status">Checking status...</div>
+    <div id="actions"></div>
+    <div class="row"><label><input type="checkbox" id="autowake"> Auto-wake enabled (all clients)</label></div>
+  </div>
+  <script>
+    const statusEl = document.getElementById('status');
+    const actionsEl = document.getElementById('actions');
+    const autoBox = document.getElementById('autowake');
+
+    let autoWake = true;
+
+    async function api(path, opts) {
+      const r = await fetch(path, Object.assign({ cache: 'no-store' }, opts || {}));
+      return r.json();
+    }
+
+    async function loadSettings() {
+      try {
+        const s = await api('/__wake/settings');
+        if (typeof s.auto_wake === 'boolean') autoWake = s.auto_wake;
+      } catch (e) {}
+      autoBox.checked = autoWake;
+    }
+
+    async function saveSettings(v) {
+      autoWake = v;
+      autoBox.checked = v;
+      try {
+        await api('/__wake/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ auto_wake: v })
+        });
+      } catch (e) {}
+    }
+
+    autoBox.addEventListener('change', async () => {
+      await saveSettings(autoBox.checked);
+      if (autoWake) { await triggerWake(false); }
+      poll();
+    });
+
+    async function triggerWake(manual) {
+      try {
+        const q = manual ? '?manual=1' : '';
+        await api('/__wake/wake' + q, { method: 'POST' });
+      } catch (e) {}
+    }
+
+    function render(d) {
+      actionsEl.innerHTML = '';
+
+      if (d.state === 'up') {
+        statusEl.className = 'ok';
+        statusEl.textContent = 'Server is online. Redirecting...';
+        setTimeout(() => location.reload(), 800);
+        return;
+      }
+
+      if (d.state === 'waking') {
+        statusEl.className = 'waking';
+        const s = (d.seconds != null) ? ` (${d.seconds}s)` : '';
+        statusEl.textContent = 'Server is coming online, please stand by...' + s;
+        return;
+      }
+
+      if (d.state === 'timeout') {
+        statusEl.className = 'error';
+        statusEl.textContent = 'Unable to wake the server.';
+        const b = document.createElement('button');
+        b.textContent = 'Try again';
+        b.onclick = () => { triggerWake(true); poll(); };
+        actionsEl.appendChild(b);
+        return;
+      }
+
+      // down (offline, no active wake attempt)
+      statusEl.className = '';
+      if (autoWake) {
+        statusEl.textContent = 'Immich is currently offline. Preparing to wake the server...';
+      } else {
+        statusEl.textContent = 'Immich is currently offline. Auto-wake is off for all clients.';
+        const b = document.createElement('button');
+        b.textContent = 'Wake server';
+        b.onclick = () => { triggerWake(true); poll(); };
+        actionsEl.appendChild(b);
+      }
+    }
+
+    async function poll() {
+      try {
+        const d = await api('/__wake/status');
+        if (typeof d.auto_wake === 'boolean') {
+          autoWake = d.auto_wake;
+          autoBox.checked = autoWake;
+        }
+        if (autoWake && d.state === 'down') { await triggerWake(false); }
+        render(d);
+      } catch (e) {
+        statusEl.className = 'error';
+        statusEl.textContent = 'Unable to reach wake service.';
+      }
+    }
+
+    async function init() {
+      await loadSettings();
+      if (autoWake) { await triggerWake(false); }
+      poll();
+      setInterval(poll, 3000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
