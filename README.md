@@ -117,8 +117,9 @@ All served under `/__wake/` (routed to the helper by NPM):
 - **Auto-suspend/shutdown of the Immich host** is intentionally out of scope for this helper and handled separately on the Immich host.
 - **Mobile/background clients:** with global auto-wake enabled, app/API requests that hit while the server is down will trigger a wake (by design, to observe wake frequency). Disable global auto-wake to require a manual “Wake server” click instead.
 - **Logo:** the status page loads the Immich logo from `ui.immich.app`; clients need internet access to display the image (wake logic itself is fully local). Inline the SVG in `index.html` if you need a fully offline/LAN-only page.
-- **Logs:** `docker logs --tail 100 immich-wake-helper` on `.106`.
-- **Persisted setting:** global auto-wake state lives in `./data/settings.json` (mounted to `/data`).
+- **Event logs (important events only):** the helper logs key events to container stdout and to a persisted, auto-rotated file `./data/wake-events.log` (mounted to `/data`, rotated daily, ~5 backups kept). Logged events include: `wol_sent` (actual WoL packet sent, with manual/auto, trigger, client IP, User-Agent), `wol_send_error`, `auto_wake_suppressed` (throttled, when auto-wake is off), `wake_timeout`, and `server_up` (including wake duration when applicable). Routine probes/requests are not logged to avoid noise.
+  - View: `ssh root@192.168.0.106 "docker logs --tail 200 immich-wake-helper"` and/or `ssh root@192.168.0.106 "tail -n 200 /opt/stacks/immich-wake-helper/data/wake-events.log"`
+- **Persisted data:** global auto-wake state lives in `./data/settings.json`; event logs in `./data/wake-events.log*` (mounted to `/data`).
 
 ## License
 
